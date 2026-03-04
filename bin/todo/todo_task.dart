@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
+import 'login_response.dart';
+import 'register_response.dart';
 import 'task.dart';
 
 var dio = Dio(BaseOptions(
@@ -96,48 +98,72 @@ void main() async {
   }
 }
 
-Future<Either<String, Map<String, dynamic>>> login() async {
+Future<Either<String, LoginResponse>> login() async {
   print("Enter username");
   String username = userInput(validateNonEmpty);
+
   print("Enter password");
   String password = userInput(validateNonEmpty);
 
   try {
-    var loginResponse = await dio.post('login',
-        data: FormData.fromMap({'username': username, 'password': password}));
-    var successResponse = loginResponse.data as Map<String, dynamic>;
-    return Right(successResponse);
-  } catch (e) {
-    if (e is DioException) {
-      var errorResponse = e.response?.data as Map<String, dynamic>;
+    var loginResponse = await dio.post(
+      'login',
+      data: FormData.fromMap({
+        'username': username,
+        'password': password,
+      }),
+    );
+
+    final data = loginResponse.data as Map<String, dynamic>;
+
+    final parsedResponse = LoginResponse.fromJson(data);
+
+    return Right(parsedResponse);
+  } on DioException catch (e) {
+    final errorResponse = e.response?.data;
+
+    if (errorResponse is Map<String, dynamic>) {
       return Left(errorResponse['message'] ?? 'Unknown error');
-    } else {
-      return Left('An Error occurred.\nTry again later');
     }
+
+    return Left('Network error. Please try again.');
+  } catch (e) {
+    return Left('An error occurred. Try again later.');
   }
 }
 
-Future<Either<String, String>> register() async {
+Future<Either<String, RegisterResponse>> register() async {
   print("Enter username");
   String username = userInput(validateNonEmpty);
+
   print("Enter password");
   String password = userInput(validateNonEmpty);
 
   try {
-    var registerResponse = await dio.post('register',
-        data: FormData.fromMap({'username': username, 'password': password}));
-    var successResponse = registerResponse.data as Map<String, dynamic>;
-    return Right(successResponse['message'] ?? 'Registration successful');
-  } catch (e) {
-    if (e is DioException) {
-      var errorResponse = e.response?.data as Map<String, dynamic>;
-      return Left(errorResponse['message'] ?? 'Unknown error');
-    } else {
-      return Left('An Error occurred.\nTry again later');
+    final response = await dio.post(
+      'register',
+      data: FormData.fromMap({
+        'username': username,
+        'password': password,
+      }),
+    );
+
+    final data = response.data as Map<String, dynamic>;
+    final parsedResponse = RegisterResponse.fromJson(data);
+
+    return Right(parsedResponse);
+  } on DioException catch (e) {
+    final errorData = e.response?.data;
+
+    if (errorData is Map<String, dynamic>) {
+      return Left(errorData['message'] ?? 'Unknown error');
     }
+
+    return Left('Network error. Please try again.');
+  } catch (e) {
+    return Left('An error occurred. Try again later.');
   }
 }
-
 Future<Map<String, dynamic>> auth() async {
   Map<String, dynamic> userData = {};
   while (true) {
@@ -154,23 +180,30 @@ Future<Map<String, dynamic>> auth() async {
     if (authChoice == 1) {
       var result = await login();
       bool loggedInFlag = false;
-      result.fold((String errorMsg) {
-        print("Login Failed: $errorMsg");
-      }, (Map<String, dynamic> userResponse) {
-        loggedInFlag = true;
-        userData = userResponse;
-      });
+      result.fold(
+        (error) {
+          print("Error: $error");
+        },
+        (loginResponse) {
+          loggedInFlag = true;
+          print("Access Token: ${loginResponse.accessToken}");
+          print("Username: ${loginResponse.user.username}");
+        },
+      );
       if (loggedInFlag == true) {
         print("Login successful");
         break;
       }
     } else if (authChoice == 2) {
       var result = await register();
-      result.fold((String errorMsg) {
-        print("Registration Failed: $errorMsg");
-      }, (String successMsg) {
-        print(successMsg);
-      });
+      result.fold(
+            (error) {
+          print("Registration Failed : $error");
+        },
+            (response) {
+          print(response.message);
+        },
+      );
     } else {
       print("See you later!");
       exit(0);
